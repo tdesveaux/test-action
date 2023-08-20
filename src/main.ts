@@ -39,14 +39,17 @@ async function run(): Promise<void> {
     // override some to match needed behaviour
     sourceSettings.persistCredentials = true
     // Start at branch point to generate base config export
-    sourceSettings.ref = pr_context.base.sha
+    sourceSettings.commit = pr_context.base.sha
 
     const git = await setupGitRepository(sourceSettings)
 
     await git.fetch([pr_context.base.sha, pr_context.head.sha], {})
 
     // We should be able to use `pr_context.merge_base` but Gitea sends a outdated one
-    const mergeBase = git.mergeBase(pr_context.base.sha, pr_context.head.sha)
+    const mergeBase = await git.mergeBase(
+      pr_context.base.sha,
+      pr_context.head.sha
+    )
     if (mergeBase !== pr_context.base.sha) {
       core.setFailed(
         `Merge base between PR Base (${pr_context.base.sha}) and PR head (${pr_context.head.sha}) is different from PR base current head (found merge-base ${mergeBase}). This is unsupported at the moment, please rebase your branch.`
