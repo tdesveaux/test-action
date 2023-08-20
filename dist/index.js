@@ -739,7 +739,7 @@ class GitCommandManager {
         return __awaiter(this, void 0, void 0, function* () {
             const args = ['merge-base', baseRef, headRef];
             const output = yield this.execGit(args, false, true);
-            return output.stdout;
+            return output.stdout.trim();
         });
     }
     remoteAdd(remoteName, remoteUrl) {
