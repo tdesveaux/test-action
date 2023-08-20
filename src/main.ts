@@ -237,6 +237,7 @@ async function exportConf(
     'export',
     '--skip-check',
     '--tree',
+    '-o',
     `"${EXPORT_REPOSITORY_PATH}"`
   ]
   await exec.exec(`"${python2Path}"`, exportArgs, {cwd: confRepositoryPath})

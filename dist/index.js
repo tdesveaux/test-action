@@ -2652,6 +2652,7 @@ function exportConf(exportRepository, confRepositoryPath, commitMessage) {
             'export',
             '--skip-check',
             '--tree',
+            '-o',
             `"${EXPORT_REPOSITORY_PATH}"`
         ];
         yield exec.exec(`"${python2Path}"`, exportArgs, { cwd: confRepositoryPath });
