@@ -252,7 +252,7 @@ async function exportConf(
   const gitCommitArgs = [
     'commit',
     '-m',
-    commitMessage,
+    `"${commitMessage.replace('"', '\\"')}"`,
     `"--author=${github.context.actor} <${github.context.actor}@noreply.com>"`
   ]
   await exportRepository.execGit(gitCommitArgs)

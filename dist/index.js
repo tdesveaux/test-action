@@ -2665,7 +2665,7 @@ function exportConf(exportRepository, confRepositoryPath, commitMessage) {
         const gitCommitArgs = [
             'commit',
             '-m',
-            commitMessage,
+            `"${commitMessage.replace('"', '\\"')}"`,
             `"--author=${github.context.actor} <${github.context.actor}@noreply.com>"`
         ];
         yield exportRepository.execGit(gitCommitArgs);
