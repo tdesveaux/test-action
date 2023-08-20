@@ -2624,7 +2624,15 @@ function exportConf(exportRepository, confRepositoryPath, commitMessage) {
     return __awaiter(this, void 0, void 0, function* () {
         core.startGroup('Export Configuration');
         core.startGroup('Remove previously exported configuration');
-        const gitRmArgs = ['rm', '--quiet', '--recursive', '--force', '--', '*'];
+        const gitRmArgs = [
+            'rm',
+            '--quiet',
+            '-r',
+            '--force',
+            '--ignore-unmatch',
+            '--',
+            '*'
+        ];
         // Remove previous export
         yield exportRepository.execGit(gitRmArgs);
         core.endGroup();

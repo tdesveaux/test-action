@@ -208,7 +208,15 @@ async function exportConf(
   core.startGroup('Export Configuration')
 
   core.startGroup('Remove previously exported configuration')
-  const gitRmArgs = ['rm', '--quiet', '--recursive', '--force', '--', '*']
+  const gitRmArgs = [
+    'rm',
+    '--quiet',
+    '-r',
+    '--force',
+    '--ignore-unmatch',
+    '--',
+    '*'
+  ]
   // Remove previous export
   await exportRepository.execGit(gitRmArgs)
   core.endGroup()
