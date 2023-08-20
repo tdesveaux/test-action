@@ -1,6 +1,5 @@
 name: 'Buildbot Pull Request Config differ'
 description: 'Provide a description here'
-author: 'Dont Nod Tools DevOps team'
 inputs:
   repository-output:
     description: 'if provided, will push a branch to this repository with a commit for each commit in the pull request'

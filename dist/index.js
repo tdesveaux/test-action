@@ -2466,16 +2466,36 @@ const gitSourceProvider = __importStar(__nccwpck_require__(1748));
 const inputHelper = __importStar(__nccwpck_require__(3465));
 const stateHelper = __importStar(__nccwpck_require__(6926));
 function run() {
-    var _a, _b;
     return __awaiter(this, void 0, void 0, function* () {
-        const pr_base = (_a = github.context.payload.pull_request) === null || _a === void 0 ? void 0 : _a.base.sha;
+        const pr_context = github.context.payload.pull_request;
+        if (!pr_context) {
+            core.setFailed('PR context is unset. Abort.');
+            return;
+        }
+        if (pr_context.merged) {
+            core.info('PR already merged. Early out.');
+            return;
+        }
+        // if (!pr_context.mergeable) {
+        //   core.setFailed('PR is not mergeable. Abort.')
+        //   return
+        // }
+        const pr_base = pr_context.base.sha;
         if (!pr_base) {
             core.setFailed(`Failed to determine PR base. Abort.`);
             return;
         }
-        const pr_target_head = (_b = github.context.payload.pull_request) === null || _b === void 0 ? void 0 : _b.head.sha;
+        if (pr_context) {
+            core.info('List properties of pr_context');
+            core.info(JSON.stringify(pr_context, undefined, '\t'));
+            //merge_base
+        }
+        else {
+            core.error('Payload context is not set');
+        }
+        const pr_target_head = pr_context === null || pr_context === void 0 ? void 0 : pr_context.head.sha;
         if (pr_target_head !== pr_base) {
-            core.setFailed(`PR base (${pr_base}) is not the same as target branch head (${pr_target_head}). This is unsupported at the moment, please rebase your branch.`);
+            core.setFailed(`[WIP] PR base (${pr_base}) is not the same as target branch head (${pr_target_head}). This is unsupported at the moment, please rebase your branch. ${pr_context === null || pr_context === void 0 ? void 0 : pr_context.body}`);
             return;
         }
         try {

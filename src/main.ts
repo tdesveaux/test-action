@@ -7,19 +7,42 @@ import * as inputHelper from './externals/checkout-action/src/input-helper'
 import * as stateHelper from './externals/checkout-action/src/state-helper'
 
 async function run(): Promise<void> {
-  const pr_base: string | undefined =
-    github.context.payload.pull_request?.base.sha
+  const pr_context = github.context.payload.pull_request
+  if (!pr_context) {
+    core.setFailed('PR context is unset. Abort.')
+    return
+  }
+
+  if (pr_context.merged) {
+    core.info('PR already merged. Early out.')
+    return
+  }
+
+  // if (!pr_context.mergeable) {
+  //   core.setFailed('PR is not mergeable. Abort.')
+  //   return
+  // }
+
+  const pr_base: string | undefined = pr_context.base.sha
 
   if (!pr_base) {
     core.setFailed(`Failed to determine PR base. Abort.`)
     return
   }
 
-  const pr_target_head: string | undefined =
-    github.context.payload.pull_request?.head.sha
+  if (pr_context) {
+    core.info('List properties of pr_context')
+    core.info(JSON.stringify(pr_context, undefined, '\t'))
+
+    //merge_base
+  } else {
+    core.error('Payload context is not set')
+  }
+
+  const pr_target_head: string | undefined = pr_context?.head.sha
   if (pr_target_head !== pr_base) {
     core.setFailed(
-      `PR base (${pr_base}) is not the same as target branch head (${pr_target_head}). This is unsupported at the moment, please rebase your branch.`
+      `[WIP] PR base (${pr_base}) is not the same as target branch head (${pr_target_head}). This is unsupported at the moment, please rebase your branch. ${pr_context?.body}`
     )
     return
   }
