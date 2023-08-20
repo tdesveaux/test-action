@@ -244,7 +244,7 @@ async function exportConf(
   core.endGroup()
 
   core.startGroup('Add exported configuration')
-  const gitAddArgs = ['add', '--force', '--', '*']
+  const gitAddArgs = ['add', '--force', '--', '.']
   await exportRepository.execGit(gitAddArgs)
   core.endGroup()
 

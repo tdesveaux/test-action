@@ -2658,7 +2658,7 @@ function exportConf(exportRepository, confRepositoryPath, commitMessage) {
         yield exec.exec(`"${python2Path}"`, exportArgs, { cwd: confRepositoryPath });
         core.endGroup();
         core.startGroup('Add exported configuration');
-        const gitAddArgs = ['add', '--force', '--', '*'];
+        const gitAddArgs = ['add', '--force', '--', '.'];
         yield exportRepository.execGit(gitAddArgs);
         core.endGroup();
         core.startGroup('Commit exported configuration');
