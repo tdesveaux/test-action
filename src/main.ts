@@ -249,7 +249,12 @@ async function exportConf(
   core.endGroup()
 
   core.startGroup('Commit exported configuration')
-  const gitCommitArgs = ['commit', '-m', commitMessage]
+  const gitCommitArgs = [
+    'commit',
+    '-m',
+    commitMessage,
+    `"--author=${github.context.actor} <${github.context.actor}@noreply.com>"`
+  ]
   await exportRepository.execGit(gitCommitArgs)
   core.endGroup()
 

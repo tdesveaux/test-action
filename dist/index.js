@@ -2662,7 +2662,12 @@ function exportConf(exportRepository, confRepositoryPath, commitMessage) {
         yield exportRepository.execGit(gitAddArgs);
         core.endGroup();
         core.startGroup('Commit exported configuration');
-        const gitCommitArgs = ['commit', '-m', commitMessage];
+        const gitCommitArgs = [
+            'commit',
+            '-m',
+            commitMessage,
+            `"--author=${github.context.actor} <${github.context.actor}@noreply.com>"`
+        ];
         yield exportRepository.execGit(gitCommitArgs);
         core.endGroup();
         core.endGroup();
