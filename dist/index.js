@@ -735,6 +735,13 @@ class GitCommandManager {
             return output.stdout;
         });
     }
+    mergeBase(baseRef, headRef) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const args = ['merge-base', baseRef, headRef];
+            const output = yield this.execGit(args, false, true);
+            return output.stdout;
+        });
+    }
     remoteAdd(remoteName, remoteUrl) {
         return __awaiter(this, void 0, void 0, function* () {
             yield this.execGit(['remote', 'add', remoteName, remoteUrl]);
@@ -2463,6 +2470,7 @@ const coreCommand = __importStar(__nccwpck_require__(7351));
 const github = __importStar(__nccwpck_require__(5438));
 const path = __importStar(__nccwpck_require__(1017));
 const gitSourceProvider = __importStar(__nccwpck_require__(1748));
+const git_command_manager_1 = __nccwpck_require__(7431);
 const inputHelper = __importStar(__nccwpck_require__(3465));
 const stateHelper = __importStar(__nccwpck_require__(6926));
 function run() {
@@ -2476,26 +2484,12 @@ function run() {
             core.info('PR already merged. Early out.');
             return;
         }
-        // if (!pr_context.mergeable) {
-        //   core.setFailed('PR is not mergeable. Abort.')
-        //   return
-        // }
-        const pr_base = pr_context.base.sha;
-        if (!pr_base) {
-            core.setFailed(`Failed to determine PR base. Abort.`);
+        if (!pr_context.base.sha) {
+            core.setFailed(`Failed to retrieve PR base from context. Abort.`);
             return;
         }
-        if (pr_context) {
-            core.info('List properties of pr_context');
-            core.info(JSON.stringify(pr_context, undefined, '\t'));
-            //merge_base
-        }
-        else {
-            core.error('Payload context is not set');
-        }
-        const pr_target_head = pr_context === null || pr_context === void 0 ? void 0 : pr_context.head.sha;
-        if (pr_target_head !== pr_base) {
-            core.setFailed(`[WIP] PR base (${pr_base}) is not the same as target branch head (${pr_target_head}). This is unsupported at the moment, please rebase your branch. ${pr_context === null || pr_context === void 0 ? void 0 : pr_context.body}`);
+        if (!pr_context.head.sha) {
+            core.setFailed(`Failed to retrieve PR head from context. Abort.`);
             return;
         }
         try {
@@ -2505,16 +2499,14 @@ function run() {
             // override some to match needed behaviour
             sourceSettings.persistCredentials = true;
             // Start at branch point to generate base config export
-            sourceSettings.ref = pr_base;
-            try {
-                // Register github action problem matcher
-                coreCommand.issueCommand('add-matcher', {}, path.join(__dirname, 'checkout-action-problem-matcher.json'));
-                // Get sources
-                yield gitSourceProvider.getSource(sourceSettings);
-            }
-            finally {
-                // Unregister problem matcher
-                coreCommand.issueCommand('remove-matcher', { owner: 'checkout-git' }, '');
+            sourceSettings.ref = pr_context.base.sha;
+            const git = yield setupGitRepository(sourceSettings);
+            yield git.fetch([pr_context.base.sha, pr_context.head.sha], {});
+            // We should be able to use `pr_context.merge_base` but Gitea sends a outdated one
+            const mergeBase = git.mergeBase(pr_context.base.sha, pr_context.head.sha);
+            if (mergeBase !== pr_context.base.sha) {
+                core.setFailed(`Merge base between PR Base (${pr_context.base.sha}) and PR head (${pr_context.head.sha}) is different from PR base current head (found merge-base ${mergeBase}). This is unsupported at the moment, please rebase your branch.`);
+                return;
             }
         }
         catch (error) {
@@ -2532,6 +2524,25 @@ function cleanup() {
         catch (error) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             core.warning(`${(_a = error === null || error === void 0 ? void 0 : error.message) !== null && _a !== void 0 ? _a : error}`);
+        }
+    });
+}
+function setupGitRepository(sourceSettings) {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            // Register github action problem matcher
+            coreCommand.issueCommand('add-matcher', {}, path.join(__dirname, 'checkout-action-problem-matcher.json'));
+            // Force depth 1 as we need to get history for 2 branches,
+            // which is not handle by checkout-action
+            sourceSettings.fetchDepth = 1;
+            // Setup repository
+            yield gitSourceProvider.getSource(sourceSettings);
+            const git = yield (0, git_command_manager_1.createCommandManager)(sourceSettings.repositoryPath, sourceSettings.lfs, sourceSettings.sparseCheckout != null);
+            return git;
+        }
+        finally {
+            // Unregister problem matcher
+            coreCommand.issueCommand('remove-matcher', { owner: 'checkout-git' }, '');
         }
     });
 }
