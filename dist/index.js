@@ -478,7 +478,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.createCommandManager = exports.MinimumGitVersion = void 0;
+exports.GitCommandManager = exports.createCommandManager = exports.MinimumGitVersion = void 0;
 const core = __importStar(__nccwpck_require__(2186));
 const exec = __importStar(__nccwpck_require__(1514));
 const fs = __importStar(__nccwpck_require__(7147));
@@ -966,6 +966,7 @@ class GitCommandManager {
         });
     }
 }
+exports.GitCommandManager = GitCommandManager;
 class GitOutput {
     constructor() {
         this.stdout = '';
@@ -2467,12 +2468,16 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const core = __importStar(__nccwpck_require__(2186));
 const coreCommand = __importStar(__nccwpck_require__(7351));
+const exec = __importStar(__nccwpck_require__(1514));
+const fsHelper = __importStar(__nccwpck_require__(563));
 const github = __importStar(__nccwpck_require__(5438));
-const path = __importStar(__nccwpck_require__(1017));
 const gitSourceProvider = __importStar(__nccwpck_require__(1748));
-const git_command_manager_1 = __nccwpck_require__(7431);
 const inputHelper = __importStar(__nccwpck_require__(3465));
+const io = __importStar(__nccwpck_require__(7436));
+const path = __importStar(__nccwpck_require__(1017));
 const stateHelper = __importStar(__nccwpck_require__(6926));
+const git_command_manager_1 = __nccwpck_require__(7431);
+const EXPORT_REPOSITORY_PATH = `/tmp/${github.context.job}/${github.context.runNumber}`;
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         const pr_context = github.context.payload.pull_request;
@@ -2500,14 +2505,30 @@ function run() {
             sourceSettings.persistCredentials = true;
             // Start at branch point to generate base config export
             sourceSettings.commit = pr_context.base.sha;
-            const git = yield setupGitRepository(sourceSettings);
-            yield git.fetch([pr_context.base.sha, pr_context.head.sha], {});
+            const confRepository = yield setupGitRepository(sourceSettings);
+            core.startGroup('Fetch base and head');
+            yield confRepository.fetch([pr_context.base.sha, pr_context.head.sha], {});
+            core.endGroup();
             // We should be able to use `pr_context.merge_base` but Gitea sends a outdated one
-            const mergeBase = yield git.mergeBase(pr_context.base.sha, pr_context.head.sha);
+            const mergeBase = yield confRepository.mergeBase(pr_context.base.sha, pr_context.head.sha);
             if (mergeBase !== pr_context.base.sha) {
                 core.setFailed(`Merge base between PR Base (${pr_context.base.sha}) and PR head (${pr_context.head.sha}) is different from PR base current head (found merge-base ${mergeBase}). This is unsupported at the moment, please rebase your branch.`);
                 return;
             }
+            const exportRepository = yield initExportRepo();
+            // Do a first export on base commit
+            const initialCommitMessage = yield getPrettyCommitMessage(confRepository);
+            yield exportConf(exportRepository, sourceSettings.repositoryPath, initialCommitMessage);
+            // TODO(TDS): Tag this commit?
+            const baseExportedCommit = yield exportRepository.revParse('HEAD');
+            const commitList = yield getCommitList(confRepository, pr_context.base.sha, pr_context.head.sha);
+            for (const commit of commitList) {
+                yield confRepository.checkout(commit, '');
+                const commitMessage = yield getPrettyCommitMessage(confRepository);
+                yield exportConf(exportRepository, sourceSettings.repositoryPath, commitMessage);
+            }
+            const lastExportedCommit = yield exportRepository.revParse('HEAD');
+            core.info(`Finished config export. ${baseExportedCommit} to ${lastExportedCommit}`);
         }
         catch (error) {
             if (error instanceof Error)
@@ -2516,7 +2537,7 @@ function run() {
     });
 }
 function cleanup() {
-    var _a;
+    var _a, _b;
     return __awaiter(this, void 0, void 0, function* () {
         try {
             yield gitSourceProvider.cleanup(stateHelper.RepositoryPath);
@@ -2525,10 +2546,18 @@ function cleanup() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             core.warning(`${(_a = error === null || error === void 0 ? void 0 : error.message) !== null && _a !== void 0 ? _a : error}`);
         }
+        try {
+            yield gitSourceProvider.cleanup(EXPORT_REPOSITORY_PATH);
+        }
+        catch (error) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            core.warning(`${(_b = error === null || error === void 0 ? void 0 : error.message) !== null && _b !== void 0 ? _b : error}`);
+        }
     });
 }
 function setupGitRepository(sourceSettings) {
     return __awaiter(this, void 0, void 0, function* () {
+        core.startGroup('Setup conf repository');
         try {
             // Register github action problem matcher
             coreCommand.issueCommand('add-matcher', {}, path.join(__dirname, 'checkout-action-problem-matcher.json'));
@@ -2537,13 +2566,97 @@ function setupGitRepository(sourceSettings) {
             sourceSettings.fetchDepth = 1;
             // Setup repository
             yield gitSourceProvider.getSource(sourceSettings);
-            const git = yield (0, git_command_manager_1.createCommandManager)(sourceSettings.repositoryPath, sourceSettings.lfs, sourceSettings.sparseCheckout != null);
+            const git = yield git_command_manager_1.GitCommandManager.createCommandManager(sourceSettings.repositoryPath, sourceSettings.lfs, sourceSettings.sparseCheckout != null);
             return git;
         }
         finally {
             // Unregister problem matcher
             coreCommand.issueCommand('remove-matcher', { owner: 'checkout-git' }, '');
+            core.endGroup();
         }
+    });
+}
+function initExportRepo() {
+    return __awaiter(this, void 0, void 0, function* () {
+        core.startGroup('Initialize export repository');
+        // Remove conflicting file path
+        if (fsHelper.fileExistsSync(EXPORT_REPOSITORY_PATH)) {
+            yield io.rmRF(EXPORT_REPOSITORY_PATH);
+        }
+        // Create directory
+        if (!fsHelper.directoryExistsSync(EXPORT_REPOSITORY_PATH)) {
+            yield io.mkdirP(EXPORT_REPOSITORY_PATH);
+        }
+        const git = yield git_command_manager_1.GitCommandManager.createCommandManager(EXPORT_REPOSITORY_PATH, false, false);
+        yield git.init();
+        core.endGroup();
+        return git;
+    });
+}
+function getPrettyCommitMessage(git) {
+    return __awaiter(this, void 0, void 0, function* () {
+        core.startGroup('Generate pretty commit for exported configuration');
+        const revParseOutput = yield git.execGit([
+            'rev-parse',
+            '--abbrev-ref',
+            'HEAD'
+        ]);
+        const logOutput = yield git.execGit([
+            'log',
+            '--no-decorate',
+            '--oneline',
+            '-1'
+        ]);
+        core.endGroup();
+        return `${revParseOutput.stdout.trim()} - ${logOutput.stdout.trim()}`;
+    });
+}
+function getCommitList(git, base, head) {
+    return __awaiter(this, void 0, void 0, function* () {
+        core.startGroup(`Get commits included in range ]${base}, ${head}]`);
+        const args = ['rev-list', '--reverse', '--first-parent', `${base}...${head}`];
+        const output = yield git.execGit(args);
+        core.endGroup();
+        return output.stdout.trim().split('\n');
+    });
+}
+function exportConf(exportRepository, confRepositoryPath, commitMessage) {
+    return __awaiter(this, void 0, void 0, function* () {
+        core.startGroup('Export Configuration');
+        core.startGroup('Remove previously exported configuration');
+        const gitRmArgs = ['rm', '--quiet', '--recursive', '--force', '--', '*'];
+        // Remove previous export
+        yield exportRepository.execGit(gitRmArgs);
+        core.endGroup();
+        core.startGroup('Find Python2 exe');
+        let python2Path;
+        try {
+            python2Path = yield io.which('python2', true);
+        }
+        catch (_a) {
+            python2Path = yield io.which('python', true);
+        }
+        core.endGroup();
+        core.startGroup('Run exporter');
+        const exportArgs = [
+            '-m',
+            'administration.master_config_utils',
+            'export',
+            '--skip-check',
+            '--tree',
+            `"${EXPORT_REPOSITORY_PATH}"`
+        ];
+        yield exec.exec(`"${python2Path}"`, exportArgs, { cwd: confRepositoryPath });
+        core.endGroup();
+        core.startGroup('Add exported configuration');
+        const gitAddArgs = ['add', '--force', '--', '*'];
+        yield exportRepository.execGit(gitAddArgs);
+        core.endGroup();
+        core.startGroup('Commit exported configuration');
+        const gitCommitArgs = ['commit', '-m', commitMessage];
+        yield exportRepository.execGit(gitCommitArgs);
+        core.endGroup();
+        core.endGroup();
     });
 }
 // Main
